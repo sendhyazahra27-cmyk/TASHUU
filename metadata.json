@@ -1,0 +1,6 @@
+{
+  "name": "Tashu — My Forever Princess",
+  "description": "An interactive Royal Velvet National Princess Day experience dedicated to Tashu by Bilal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
