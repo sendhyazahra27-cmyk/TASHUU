@@ -30,35 +30,39 @@ export function discoverGalleryPhotos(): GalleryPhoto[] {
   const seenHashes = new Set<string>();
   const discovered: GalleryPhoto[] = [];
 
-  for (const folder of folders) {
-    if (!fs.existsSync(folder.dir)) continue;
+  try {
+    for (const folder of folders) {
+      if (!fs.existsSync(folder.dir)) continue;
 
-    const entries = fs
-      .readdirSync(folder.dir, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && isSupportedImageFilename(entry.name))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      const entries = fs
+        .readdirSync(folder.dir, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && isSupportedImageFilename(entry.name))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-    for (const entry of entries) {
-      const fullPath = path.join(folder.dir, entry.name);
-      try {
-        const buffer = fs.readFileSync(fullPath);
-        const hash = crypto.createHash('md5').update(buffer).digest('hex');
-        if (seenHashes.has(hash)) continue;
-        seenHashes.add(hash);
+      for (const entry of entries) {
+        const fullPath = path.join(folder.dir, entry.name);
+        try {
+          const buffer = fs.readFileSync(fullPath);
+          const hash = crypto.createHash('md5').update(buffer).digest('hex');
+          if (seenHashes.has(hash)) continue;
+          seenHashes.add(hash);
 
-        const curated = PHOTO_CAPTIONS_BY_FILENAME[entry.name];
-        const idx = discovered.length;
-        discovered.push({
-          id: `royal-photo-${idx + 1}`,
-          src: `${folder.urlPrefix}/${encodeURIComponent(entry.name)}`,
-          alt: curated ? `Tashu — ${curated.tag}` : `Tashu — Royal Memory ${idx + 1}`,
-          caption: curated ? curated.caption : buildFallbackCaption(idx),
-          tag: curated ? curated.tag : `Memory ${String(idx + 1).padStart(2, '0')}`,
-        });
-      } catch {
-        // Ignore unreadable files safely
+          const curated = PHOTO_CAPTIONS_BY_FILENAME[entry.name];
+          const idx = discovered.length;
+          discovered.push({
+            id: `royal-photo-${idx + 1}`,
+            src: `${folder.urlPrefix}/${encodeURIComponent(entry.name)}`,
+            alt: curated ? `Tashu — ${curated.tag}` : `Tashu — Royal Memory ${idx + 1}`,
+            caption: curated ? curated.caption : buildFallbackCaption(idx),
+            tag: curated ? curated.tag : `Memory ${String(idx + 1).padStart(2, '0')}`,
+          });
+        } catch {
+          // Ignore unreadable files safely
+        }
       }
     }
+  } catch {
+    // Fallback cleanly in Workers/edge runtimes without local filesystem access
   }
 
   return discovered.length > 0 ? discovered : FALLBACK_GALLERY_PHOTOS;
