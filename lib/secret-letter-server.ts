@@ -1,14 +1,17 @@
 import 'server-only';
-import { timingSafeEqual } from 'node:crypto';
-import { isValidSecretAttempt } from '@/lib/experience-logic';
+import {
+  isValidSecretAttempt,
+  normalizeSecretPasswordInput,
+} from '@/lib/experience-logic';
 
 /**
  * ============================================================================
  * SECRET LOVE LETTER CONFIGURATION (SINGLE SOURCE OF TRUTH)
  * ============================================================================
  * Bilal: To change the secret password for Tashu's private letter:
- *   1. Recommended: Set `SECRET_LETTER_PASSWORD` in your environment / Secrets panel.
- *   2. Or update `DEFAULT_FALLBACK_PASSWORD` below (used only if the env var is
+ *   1. Recommended: Set `SECRET_LETTER_PASSWORD` in your environment / Secrets panel
+ *      (or via `wrangler secret put SECRET_LETTER_PASSWORD` on Cloudflare Workers).
+ *   2. Or update `DEFAULT_FALLBACK_PASSWORD` below (used when the env var is
  *      not configured).
  *
  * SECURITY NOTE:
@@ -16,13 +19,47 @@ import { isValidSecretAttempt } from '@/lib/experience-logic';
  * password nor the letter content is ever bundled into client-side JavaScript.
  * Verification runs exclusively on the server via POST /api/secret-letter/unlock.
  */
-const DEFAULT_FALLBACK_PASSWORD = 'Tashu18Nov';
+const DEFAULT_FALLBACK_PASSWORD = '24022009';
+
+interface CloudflareContextLike {
+  env?: Record<string, unknown>;
+}
+
+function readCloudflareSecretEnv(): unknown {
+  const ctx = (
+    globalThis as Record<symbol, CloudflareContextLike | undefined>
+  )[Symbol.for('__cloudflare-context__')];
+  return ctx?.env?.SECRET_LETTER_PASSWORD;
+}
+
+function normalizeConfiguredSecret(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  let cleaned = normalizeSecretPasswordInput(raw);
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = normalizeSecretPasswordInput(cleaned.slice(1, -1));
+  }
+  if (!cleaned || cleaned === 'MY_SECRET_LETTER_PASSWORD') {
+    return null;
+  }
+  return cleaned;
+}
 
 export function getConfiguredSecretPassword(): string {
-  const fromEnv = process.env.SECRET_LETTER_PASSWORD?.trim();
-  if (fromEnv && fromEnv !== 'MY_SECRET_LETTER_PASSWORD') {
-    return fromEnv;
+  const fromCloudflare = normalizeConfiguredSecret(readCloudflareSecretEnv());
+  if (fromCloudflare) {
+    return fromCloudflare;
   }
+
+  const fromProcessEnv = normalizeConfiguredSecret(
+    process.env.SECRET_LETTER_PASSWORD
+  );
+  if (fromProcessEnv) {
+    return fromProcessEnv;
+  }
+
   return DEFAULT_FALLBACK_PASSWORD;
 }
 
@@ -57,14 +94,16 @@ const SECRET_LETTER_CONTENT: SecretLetterPayload = {
 };
 
 function constantTimeEquals(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, 'utf8');
-  const bufB = Buffer.from(b, 'utf8');
-  if (bufA.length !== bufB.length) {
-    // Compare equal-length dummy buffer to keep execution uniform, then return false
-    timingSafeEqual(bufA, bufA);
-    return false;
+  const encoder = new TextEncoder();
+  const bytesA = encoder.encode(a);
+  const bytesB = encoder.encode(b);
+  const maxLen = Math.max(bytesA.length, bytesB.length);
+
+  let diff = bytesA.length ^ bytesB.length;
+  for (let i = 0; i < maxLen; i += 1) {
+    diff |= (bytesA[i] ?? 0) ^ (bytesB[i] ?? 0);
   }
-  return timingSafeEqual(bufA, bufB);
+  return diff === 0;
 }
 
 export function verifyAndGetSecretLetter(
@@ -74,7 +113,7 @@ export function verifyAndGetSecretLetter(
     return { ok: false, reason: 'empty' };
   }
 
-  const normalizedAttempt = attempt.trim();
+  const normalizedAttempt = normalizeSecretPasswordInput(attempt);
   const expected = getConfiguredSecretPassword();
 
   if (!constantTimeEquals(normalizedAttempt, expected)) {

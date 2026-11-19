@@ -17,7 +17,10 @@ import {
   X,
 } from 'lucide-react';
 import { SECRET_LETTER_TEASER } from '@/lib/royal-content';
-import { isValidSecretAttempt } from '@/lib/experience-logic';
+import {
+  isValidSecretAttempt,
+  normalizeSecretPasswordInput,
+} from '@/lib/experience-logic';
 import type { SecretLetterPayload } from '@/lib/secret-letter-server';
 
 interface SecretLoveLetterProps {
@@ -98,7 +101,8 @@ export default function SecretLoveLetter({
     e.preventDefault();
     if (submitting) return;
 
-    if (!isValidSecretAttempt(passwordInput)) {
+    const cleanedPassword = normalizeSecretPasswordInput(String(passwordInput));
+    if (!isValidSecretAttempt(cleanedPassword)) {
       setErrorMsg('Meri Princess, pehle apna secret password likhein ❤️');
       return;
     }
@@ -109,20 +113,39 @@ export default function SecretLoveLetter({
     try {
       const response = await fetch('/api/secret-letter/unlock', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: passwordInput }),
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify({ password: cleanedPassword }),
       });
 
-      const data = (await response.json()) as {
+      let data: {
         ok?: boolean;
         message?: string;
         letter?: SecretLetterPayload;
-      };
+      } | null = null;
 
-      if (!response.ok || !data.ok || !data.letter) {
+      try {
+        data = (await response.json()) as {
+          ok?: boolean;
+          message?: string;
+          letter?: SecretLetterPayload;
+        };
+      } catch {
+        data = null;
+      }
+
+      if (!response.ok || !data?.ok || !data.letter) {
+        const isClientAuthError =
+          response.status === 400 || response.status === 401;
         setErrorMsg(
-          data.message ||
-            'Yeh secret password sahi nahi hai, Meri Princess... Dil se dobara koshish karein ❤️'
+          data?.message ||
+            (isClientAuthError
+              ? 'Yeh secret password sahi nahi hai, Meri Princess... Dil se dobara koshish karein ❤️'
+              : 'Abhi connection mein thodi si rukawat aayi hai, Meri Princess. Dobara koshish karein ❤️')
         );
         setSubmitting(false);
         return;
@@ -342,7 +365,9 @@ export default function SecretLoveLetter({
                   <div className="relative flex items-center">
                     <input
                       id="secret-letter-password"
+                      name="secret-letter-passcode"
                       type={showPassword ? 'text' : 'password'}
+                      inputMode="numeric"
                       value={passwordInput}
                       onChange={(e) => {
                         setPasswordInput(e.target.value);
@@ -350,8 +375,14 @@ export default function SecretLoveLetter({
                       }}
                       placeholder={SECRET_LETTER_TEASER.passwordPlaceholder}
                       autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      enterKeyHint="go"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       autoFocus
-                      className="min-h-[52px] w-full rounded-2xl border border-[#D8B56D]/40 bg-[#120822]/90 py-3 pr-12 pl-4 text-center text-sm text-[#FFF5E9] placeholder:text-[#FFF5E9]/45 focus:border-[#D8B56D] focus:outline-none sm:text-base"
+                      className="min-h-[52px] w-full rounded-2xl border border-[#D8B56D]/40 bg-[#120822]/90 py-3 pr-12 pl-4 text-center text-base text-[#FFF5E9] placeholder:text-[#FFF5E9]/45 focus:border-[#D8B56D] focus:outline-none"
                     />
                     <button
                       type="button"

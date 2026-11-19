@@ -13,6 +13,7 @@ import {
   isSupportedImageFilename,
   buildFallbackCaption,
   isValidSecretAttempt,
+  normalizeSecretPasswordInput,
   getSongPlaybackMode,
   getScrollRevealDelay,
 } from './experience-logic';
@@ -86,10 +87,14 @@ test('buildFallbackCaption rotates through heartfelt Roman Urdu captions', () =>
   assert.notEqual(c0, c1);
 });
 
-test('isValidSecretAttempt rejects blank/whitespace and accepts non-empty input', () => {
+test('isValidSecretAttempt and normalizeSecretPasswordInput preserve exact string password and trim whitespace/invisible chars', () => {
   assert.equal(isValidSecretAttempt(''), false);
   assert.equal(isValidSecretAttempt('   '), false);
-  assert.equal(isValidSecretAttempt('Tashu18Nov'), true);
+  assert.equal(isValidSecretAttempt('\u200B  \uFEFF'), false);
+  assert.equal(isValidSecretAttempt('24022009'), true);
+  assert.equal(normalizeSecretPasswordInput(' 24022009 '), '24022009');
+  assert.equal(normalizeSecretPasswordInput('\u200B24022009\u00A0'), '24022009');
+  assert.equal(normalizeSecretPasswordInput(' 0024022009 '), '0024022009');
 });
 
 test('getSongPlaybackMode accurately identifies audio, external, and unconfigured songs', () => {

@@ -97,8 +97,12 @@ export function buildFallbackCaption(index: number): string {
   return captions[index % captions.length];
 }
 
+export function normalizeSecretPasswordInput(attempt: string): string {
+  return attempt.replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, '').trim();
+}
+
 export function isValidSecretAttempt(attempt: string): boolean {
-  return attempt.trim().length > 0;
+  return normalizeSecretPasswordInput(attempt).length > 0;
 }
 
 export type SongPlaybackMode = 'audio' | 'external' | 'unconfigured';
